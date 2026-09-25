@@ -1,0 +1,29 @@
+# Observability settings (Phase 19) — same convention as the other config files: what is tunable lives
+# here, not in code. Logging level/format can also be set per process with LOG_LEVEL / LOG_FORMAT, and
+# the overdue threshold with RUN_OVERDUE_SECONDS; the environment wins.
+logging:
+  level: INFO
+  format: text          # text (human, for a terminal) | json (one object per line, for a log pipeline)
+
+metrics:
+  reservoir_size: 512   # observations kept per latency series for the p50/p95 (a bounded, recent window)
+
+runs:
+  # A run that has been RUNNING longer than this is reported as `overdue` in its status. Nothing kills it —
+  # a worker thread can't be interrupted safely — but a person or an alert can see that it is stuck.
+  overdue_seconds: 120
+
+llm:
+  # Stop calling a model that keeps failing: after this many consecutive unavailable results the breaker
+  # opens for the cooldown, and calls fail at once instead of holding a worker for retries x timeout.
+  circuit_failure_threshold: 3
+  circuit_cooldown_seconds: 30
+
+model:
+  # Simple drift warning (docs/model-plan.md §8): the mean of the demand window the forecast is built on,
+  # measured in standard deviations of that product's training-time 28-day means. A threshold check, not
+  # a drift-detection library.
+  drift_z_threshold: 3.0
+  drift_window_days: 28
+  min_training_windows: 30     # fewer training windows than this and there is no distribution to compare with
+  warnings_kept: 50

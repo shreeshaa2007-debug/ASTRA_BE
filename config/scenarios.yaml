@@ -1,0 +1,100 @@
+# Scenario definitions (Phase 17) — same convention as compliance_rules.yaml and
+# optimization_config.yaml: what a scenario IS lives here, not in code.
+#
+# A scenario is a parameterized disruption. It is applied through exactly the
+# rule the live pipeline uses (backend/services/world_state/events.py
+# EVENT_EFFECTS), so a scenario and a sensed report of the same event change the
+# world identically. `event` has the fields of a DisruptionEvent (brief §13).
+#
+# A tariff's AMOUNT is not part of an event (brief §13); it is set here, as
+# percentage points added to the baseline World Bank rate (`tariff_add_pct`,
+# ISO3 -> points).
+#
+# `modeled: false` means the pipeline records this kind of event but nothing
+# acts on it yet (docs/implementation-plan.md, Phase 13 known limits). Such a
+# scenario is listed so it can be seen, and refuses to produce a comparison —
+# a number for something the model cannot represent would be invented.
+scenarios:
+  SUEZ_CLOSURE:
+    label: Suez Canal Closure
+    description: A grounded vessel blocks the canal; every lane routed through Suez is unavailable.
+    modeled: true
+    default_product_id: "22197"
+    event:
+      event_type: canal_closure
+      location: Suez Canal
+      severity: CRITICAL
+      estimated_duration: 10
+      affected_routes: [SHA-ROT-SUEZ, SIN-ROT-SUEZ, MUM-ROT-SUEZ, CHE-ROT-SUEZ]
+      affected_suppliers: []
+      affected_products: []
+      confidence: 1.0
+      summary: A vessel is aground in the Suez Canal and blocks all traffic.
+
+  SUPPLIER_FAILURE:
+    label: Supplier Failure (Istanbul)
+    description: A plant fire takes supplier S007 (Istanbul, Turkey) offline; no route is affected.
+    modeled: true
+    default_product_id: "22197"
+    event:
+      event_type: supplier_failure
+      location: Istanbul, Turkey
+      severity: HIGH
+      estimated_duration: 30
+      affected_routes: []
+      affected_suppliers: [S007]
+      affected_products: []
+      confidence: 1.0
+      summary: Fire at the Istanbul plant; supplier S007 cannot ship.
+
+  SEVERE_WEATHER:
+    label: Severe Weather (Mumbai cyclone)
+    description: A cyclone makes landfall at Mumbai and closes the port; the Mumbai lane is unavailable, and supplier S003, which ships through it, is stranded.
+    modeled: true
+    default_product_id: "22197"
+    event:
+      event_type: severe_weather
+      location: Mumbai, India
+      severity: HIGH
+      estimated_duration: 5
+      affected_routes: [MUM-ROT-SUEZ]
+      affected_suppliers: []
+      affected_products: []
+      confidence: 1.0
+      summary: A cyclone makes landfall at Mumbai and closes the port.
+
+  TARIFF_INCREASE:
+    label: Tariff Increase (Turkey)
+    description: A sharp rise in tariffs on imports from Turkey; raises the landed cost of Turkish suppliers and blocks nothing.
+    modeled: true
+    default_product_id: "22197"
+    event:
+      event_type: tariff_change
+      location: Turkey
+      severity: MEDIUM
+      estimated_duration: 60
+      affected_routes: []
+      affected_suppliers: [S007]   # exposed, not blocked: a tariff_change event changes no status (EVENT_EFFECTS), but Sensing needs one affected entity
+      affected_products: []
+      confidence: 1.0
+      summary: Tariffs on imports from Turkey rise sharply.
+    tariff_add_pct:
+      TUR: 25.0
+
+  PORT_CONGESTION:
+    label: Port Congestion (Rotterdam)
+    description: A berth bottleneck at Rotterdam delays every inbound lane.
+    modeled: false
+    not_modeled_reason: >-
+      The state records a DELAYED route, but the Logistics Agent and the optimizer only exclude DISRUPTED lanes; neither
+      lengthens a transit time. Simulating this needs a transit-delay model, which does not exist yet.
+    default_product_id: "22197"
+
+  DEMAND_SURGE:
+    label: Demand Surge
+    description: An unexpected jump in demand outstrips the warehouses' buffers.
+    modeled: false
+    not_modeled_reason: >-
+      A demand surge changes no route or supplier status, and nothing lets a scenario scale the Inventory Agent's
+      forecast. Simulating this needs a demand-multiplier hook in the forecast path, which does not exist yet.
+    default_product_id: "22197"

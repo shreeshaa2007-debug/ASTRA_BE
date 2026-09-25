@@ -1,0 +1,22 @@
+# Compliance rules — per brief §12, these must be configurable, not
+# hardcoded across the codebase. Edit this file to change policy; the
+# Compliance Agent (backend/agents/compliance/) reads it, never hardcodes a
+# threshold or list itself.
+#
+# rejected_suppliers/restricted_countries are empty by default: this project
+# has no real sanctions list to draw from, and fabricating one would be
+# irresponsible content to ship, even for a hackathon demo. The mechanism is
+# proven with tests that add a value here temporarily (see
+# backend/tests/test_compliance_agent.py), not by inventing real-sounding
+# entries.
+rejected_suppliers: []
+restricted_countries: []
+
+# Plans costing more than this require human approval (ESCALATED, not
+# REJECTED) rather than executing automatically. In the same MVP cost unit
+# every other processed table uses (suppliers.csv's unit_cost, routes.csv's
+# cost_per_unit) — no real currency peg, see docs/agent-plan.md's Compliance
+# Agent section. Chosen so a realistic sourcing-mix-plus-shipment plan in
+# this dataset sometimes clears it and sometimes doesn't, rather than never
+# triggering an escalation in the demo.
+approval_threshold: 500000

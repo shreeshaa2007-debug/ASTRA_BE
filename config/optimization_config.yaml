@@ -1,0 +1,41 @@
+# Optimization Engine configuration (Phase 10) — same convention as
+# compliance_rules.yaml: policy and topology live here, not scattered through
+# the code. Everything under `network` is a modeling ASSUMPTION about how the
+# four processed datasets connect, not a measured fact — the datasets were
+# built independently (see docs/architecture.md §4.1).
+network:
+  # Every route in routes.csv ends here. Inbound freight is treated as landing
+  # at this hub and being available to every warehouse in the inventory ledger;
+  # onward hub->warehouse distribution is NOT modeled (no data for it).
+  inbound_hub: Rotterdam
+
+  # supplier -> origin port whose lanes carry that supplier's goods to the hub.
+  # The suppliers.csv roster is synthetic and carries only a country, so this
+  # picks the nearest port that routes.csv actually has. `null` means "no
+  # freight leg is modeled" (supplier at/near the hub, or no route on file) —
+  # freight cost and transit are taken as 0, which flatters that supplier, and
+  # the solution's `assumptions` says so. A supplier missing from this map is
+  # excluded from the problem rather than silently assumed direct.
+  supplier_origin_port:
+    S001: Shanghai   # Chengdu, China
+    S002: Shanghai   # Shenzhen, China
+    S003: Mumbai     # Pune, India
+    S004: Chennai    # Chennai, India
+    S005: Singapore  # Hanoi, Vietnam (transshipment)
+    S006: Singapore  # Ho Chi Minh City, Vietnam (transshipment)
+    S007: null       # Istanbul, Turkey — no Turkey->Rotterdam route on file
+    S008: null       # Rotterdam, Netherlands — already at the hub
+
+# Defaults for OptimizationParameters; a scenario overrides per run.
+defaults:
+  # Long enough to span overseas supply pipelines (lead time + transit is
+  # 15-40 days on this data); the 14-day forecast horizon the Inventory Agent
+  # defaults to can never justify an overseas order.
+  planning_horizon_days: 45
+  # PLACEHOLDER — no inter-warehouse freight data exists. Only its size
+  # relative to procurement cost matters (transfers should beat buying new).
+  internal_transfer_cost_per_unit: 5.0
+  internal_transfer_days: 2
+  # Soft deadline off by default; a scenario that values speed sets both.
+  target_delivery_days: null
+  delay_penalty_per_unit_day: 0.0

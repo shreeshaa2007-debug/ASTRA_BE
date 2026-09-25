@@ -1,0 +1,33 @@
+# Sensing Agent configuration (brief §13) — same convention as
+# compliance_rules.yaml: the validator's limits live here, not in the code.
+# Secrets and the model name are NOT here: LLM_API_KEY / LLM_MODEL come from
+# the environment (.env.example).
+
+# Closed vocabulary for DisruptionEvent.event_type. "other" exists so an
+# unusual event isn't force-fitted into the wrong type.
+event_types:
+  - canal_closure
+  - port_congestion
+  - supplier_failure
+  - tariff_change
+  - demand_surge
+  - severe_weather
+  - other
+
+# What validate_event() enforces on the LLM's candidate. All are policy, not
+# facts about the data — tune them here.
+limits:
+  max_input_chars: 4000     # longer reports are rejected before the LLM sees them
+  min_confidence: 0.5       # fail closed: below this the candidate is not acted on
+  max_duration_days: 365
+  max_past_days: 365        # start_date may be at most this far in the past...
+  max_future_days: 30       # ...and this far ahead
+
+# Transport to the LLM. thinking_budget 0 turns off Gemini 2.5-flash's
+# thinking: extraction doesn't need it and it costs seconds. Set null to omit
+# (required for a model that doesn't accept thinkingConfig).
+llm:
+  timeout_seconds: 30
+  max_retries: 2            # transient failures only (429/5xx/timeout); bad output is never retried
+  backoff_seconds: 2.0
+  thinking_budget: 0
