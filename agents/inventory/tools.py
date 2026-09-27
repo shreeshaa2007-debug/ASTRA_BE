@@ -7,17 +7,12 @@ inventory transfers, it produces a structured recommendation."
 """
 from __future__ import annotations
 
-from functools import lru_cache
-from pathlib import Path
-
 import numpy as np
 import pandas as pd
 
+from backend.data import cached_dataset_loader, get_datasets
 from backend.models.forecasting.predictor import load_predictor
 from backend.monitoring.model_monitor import monitor
-
-INVENTORY_PATH = Path("data/processed/inventory_multi_warehouse.csv")
-MODELING_PANEL_PATH = Path("data/processed/demand_modeling_panel.csv")
 
 # location_id the forecasting model was actually trained on (model-plan.md /
 # ml/training) — always "United Kingdom" in this dataset, distinct from the
@@ -31,16 +26,16 @@ DEFAULT_FORECAST_HORIZON_DAYS = 14
 TRANSFER_TARGET_SAFETY_MULTIPLE = 1.5  # bring a deficit warehouse up to 1.5x its own safety stock, not further
 
 
-@lru_cache(maxsize=1)
+@cached_dataset_loader()
 def _load_inventory() -> pd.DataFrame:
-    df = pd.read_csv(INVENTORY_PATH, parse_dates=["date"])
+    df = get_datasets().load("inventory")
     df["product_id"] = df["product_id"].astype(str)
     return df
 
 
-@lru_cache(maxsize=1)
+@cached_dataset_loader()
 def _load_demand_panel() -> pd.DataFrame:
-    df = pd.read_csv(MODELING_PANEL_PATH, parse_dates=["date"], usecols=["date", "product_id", "location_id", "demand_quantity"])
+    df = get_datasets().load("demand_panel", ["date", "product_id", "location_id", "demand_quantity"])
     df["product_id"] = df["product_id"].astype(str)
     return df
 

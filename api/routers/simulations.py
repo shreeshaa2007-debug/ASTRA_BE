@@ -10,17 +10,18 @@ from backend.api import views
 from backend.api.context import AppContext, get_ctx
 from backend.api.errors import ApiError
 from backend.api.models import CreateSimulationRequest, RunRequest
+from backend.api.security import OPERATE, VIEW, require
 from backend.schemas.world_state import SimulationStatus
 from backend.simulation import compare_state
 
-router = APIRouter(prefix="/api/simulations", tags=["simulations"])
+router = APIRouter(prefix="/api/simulations", tags=["simulations"], dependencies=[Depends(require(VIEW))])
 
 
 def envelope(data):
     return {"data": data}
 
 
-@router.post("", status_code=201)
+@router.post("", status_code=201, dependencies=[Depends(require(OPERATE))])
 def create_simulation(body: CreateSimulationRequest, ctx: AppContext = Depends(get_ctx)):
     """A new isolated simulation at the baseline network: routes, suppliers and tariffs as the data files have them."""
     return envelope(views.state_view(ctx.store.create(body.scenario_type, simulation_id=body.simulation_id)))
@@ -37,7 +38,7 @@ def get_simulation(simulation_id: str, ctx: AppContext = Depends(get_ctx)):
     return envelope(views.state_view(ctx.store.get(simulation_id)))
 
 
-@router.post("/{simulation_id}/run", status_code=202)
+@router.post("/{simulation_id}/run", status_code=202, dependencies=[Depends(require(OPERATE))])
 def run_simulation(simulation_id: str, body: RunRequest, ctx: AppContext = Depends(get_ctx)):
     """Starts the pipeline on a worker thread and returns at once; poll `/status`.
     Everything that can be checked cheaply is checked here, so a bad request is a
@@ -65,7 +66,7 @@ def get_status(simulation_id: str, ctx: AppContext = Depends(get_ctx)):
     return envelope(views.read_status(ctx.store, ctx.runs, simulation_id))
 
 
-@router.post("/{simulation_id}/reset")
+@router.post("/{simulation_id}/reset", dependencies=[Depends(require(OPERATE))])
 def reset_simulation(simulation_id: str, ctx: AppContext = Depends(get_ctx)):
     """Back to the state the simulation was created with (from any status); the audit trail is kept."""
     if ctx.runs.is_running(simulation_id):

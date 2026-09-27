@@ -29,12 +29,12 @@ from typing import Callable, Optional, Sequence
 import numpy as np
 import pandas as pd
 
+from backend.data import get_datasets
 from backend.monitoring.metrics import metrics
 from backend.monitoring.settings import load_settings
 
 logger = logging.getLogger("resilientsc.monitoring.model")
 
-MODELING_PANEL_PATH = Path("data/processed/demand_modeling_panel.csv")
 NUMERIC_FEATURES = 8  # lag_1, lag_2, lag_7, lag_14, lag_28, rolling_mean_7, rolling_mean_14, rolling_mean_28
 
 
@@ -45,11 +45,13 @@ class TrainingStats:
     windows: int
 
 
-def load_training_stats(path: Path = MODELING_PANEL_PATH) -> dict[str, TrainingStats]:
+def load_training_stats(path: Path | None = None) -> dict[str, TrainingStats]:
     """Per product: mean and standard deviation of the 28-day rolling mean over the training split, from the
     first full window on (the first 27 days of a series have a partial window, which the model saw but which is
-    not the distribution a full window is compared with)."""
-    panel = pd.read_csv(path, usecols=["date", "product_id", "rolling_mean_28", "split"], parse_dates=["date"])
+    not the distribution a full window is compared with). From the `demand_panel` dataset, or from the CSV at
+    `path` when one is given."""
+    columns = ["date", "product_id", "rolling_mean_28", "split"]
+    panel = get_datasets().load("demand_panel", columns) if path is None else pd.read_csv(path, usecols=columns, parse_dates=["date"])
     panel["product_id"] = panel["product_id"].astype(str)
     train = panel[panel["split"] == "train"].sort_values(["product_id", "date"])
     stats: dict[str, TrainingStats] = {}

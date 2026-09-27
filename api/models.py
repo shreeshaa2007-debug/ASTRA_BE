@@ -17,7 +17,7 @@ def max_signal_chars() -> int:
     return sensing_tools.load_config()["limits"]["max_input_chars"]
 
 
-def _checked_text(text: str) -> str:
+def checked_text(text: str) -> str:
     stripped = text.strip()
     if not stripped:
         raise ValueError("must not be empty")
@@ -42,7 +42,7 @@ class SimulatedTrigger(BaseModel):
     @field_validator("description")
     @classmethod
     def _description(cls, v: str) -> str:
-        return _checked_text(v)
+        return checked_text(v)
 
 
 class RunRequest(BaseModel):
@@ -54,7 +54,7 @@ class RunRequest(BaseModel):
     @field_validator("signal")
     @classmethod
     def _signal(cls, v):
-        return _checked_text(v) if isinstance(v, str) else v
+        return checked_text(v) if isinstance(v, str) else v
 
     def signal_for_orchestrator(self) -> str | dict:
         if isinstance(self.signal, str):

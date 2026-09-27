@@ -11,9 +11,16 @@ from backend.agents.inventory import tools as inventory_tools
 from backend.api import readiness
 from backend.api.context import AppContext, get_ctx
 from backend.api.errors import ApiError
+from backend.api.security import VIEW, Principal, current_principal, require
 from backend.monitoring import metrics, monitor
 
 router = APIRouter(prefix="/api", tags=["operations"])
+
+
+@router.get("/me")
+def me(principal: Principal = Depends(current_principal)):
+    """Who the API thinks you are and what you may do. With authentication off, an anonymous caller holding every scope."""
+    return {"data": {"name": principal.name, "authenticated": principal.authenticated, "is_user": principal.is_user, "scopes": sorted(principal.scopes)}}
 
 
 @router.get("/ready")
@@ -26,7 +33,7 @@ def ready(ctx: AppContext = Depends(get_ctx)):
     return JSONResponse(body, status_code=200 if is_ready else 503)
 
 
-@router.get("/metrics")
+@router.get("/metrics", dependencies=[Depends(require(VIEW))])
 def get_metrics(format: Literal["json", "prometheus"] = "json", ctx: AppContext = Depends(get_ctx)):
     """Counters, gauges and latency summaries for this process (uptime, requests, runs and their steps, the optimizer,
     the language model, compliance, approvals, the demand model). `?format=prometheus` is the Prometheus text format."""
@@ -36,7 +43,7 @@ def get_metrics(format: Literal["json", "prometheus"] = "json", ctx: AppContext 
     return {"data": metrics.snapshot()}
 
 
-@router.get("/monitoring/model")
+@router.get("/monitoring/model", dependencies=[Depends(require(VIEW))])
 def model_monitoring(backtest_product_id: Optional[str] = None, horizon_days: int = Query(14, ge=1, le=60)):
     """The demand model's health: inference count, latency, version, missing-feature rate, drift warnings, and prediction
     error. With `backtest_product_id` it first scores the model against the last `horizon_days` of that product's

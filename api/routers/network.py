@@ -18,9 +18,10 @@ from fastapi import APIRouter, Depends, Query
 from backend.api import views
 from backend.api.context import AppContext, get_ctx
 from backend.api.models import ForecastRequest
+from backend.api.security import VIEW, require
 from backend.schemas.world_state import SimulationStatus, WorldState
 
-router = APIRouter(prefix="/api", tags=["network"])
+router = APIRouter(prefix="/api", tags=["network"], dependencies=[Depends(require(VIEW))])
 
 
 def envelope(data):

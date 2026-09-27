@@ -15,8 +15,6 @@ import logging
 import math
 from collections import defaultdict
 from datetime import date, timedelta
-from functools import lru_cache
-from pathlib import Path
 from typing import Any
 
 import pandas as pd
@@ -26,6 +24,7 @@ from backend.agents.logistics import tools as logistics_tools
 from backend.agents.sourcing import tools as sourcing_tools
 from backend.api.errors import ApiError
 from backend.api.models import ForecastRequest
+from backend.data import cached_dataset_loader, get_datasets
 from backend.models.forecasting.predictor import load_predictor
 from backend.optimization import tools as optimization_tools
 from backend.orchestration import adapters
@@ -35,8 +34,6 @@ from backend.services.world_state import load_baseline
 from backend.simulation import compare_state
 
 logger = logging.getLogger("resilientsc.api")
-
-DISRUPTIONS_PATH = Path("data/processed/disruptions.csv")
 
 
 def clean(value: Any) -> Any:
@@ -376,9 +373,9 @@ def shipment_rows(state: WorldState | None, route_id: str | None, status: str | 
 # --------------------------------------------------------------------------- #
 # disruptions
 # --------------------------------------------------------------------------- #
-@lru_cache(maxsize=1)
+@cached_dataset_loader()
 def _historical() -> pd.DataFrame:
-    df = pd.read_csv(DISRUPTIONS_PATH, parse_dates=["start_date", "end_date"])
+    df = get_datasets().load("disruptions")
     df["source"] = df["event_id"].astype(str).str.startswith("CURATED").map({True: "curated", False: "noaa"})
     return df.sort_values("start_date", ascending=False).reset_index(drop=True)
 

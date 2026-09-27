@@ -89,8 +89,9 @@ export async function launch({ chrome, profile, port, artifacts, width = 1440, h
     },
     async shot(name) { const r = await send('Page.captureScreenshot', { format: 'png' }); writeFileSync(`${artifacts}/${name}.png`, Buffer.from(r.result.data, 'base64')); },
     // a screenshot of the whole screen: the viewport is grown to the content's height for the shot, then restored
+    // (the + 84 below: the header is 68px tall and the panels float on a canvas gap)
     async shotFit(name, { minHeight = 900, maxHeight = 6000 } = {}) {
-      const content = await b.ev(`(() => { const m = document.querySelector('main'); return m ? m.scrollHeight + 52 : document.documentElement.scrollHeight; })()`);
+      const content = await b.ev(`(() => { const m = document.querySelector('main'); return m ? m.scrollHeight + 84 : document.documentElement.scrollHeight; })()`);
       const fitted = Math.max(minHeight, Math.min(maxHeight, Math.ceil(content)));
       await send('Emulation.setDeviceMetricsOverride', { width, height: fitted, deviceScaleFactor: 1, mobile: false });
       await sleep(400);

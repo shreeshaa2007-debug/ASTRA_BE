@@ -1,11 +1,11 @@
 """World-state persistence adapter — architecture.md §2/§5.
 
 `WorldStateRepository` is the interface the rest of the system codes against;
-`SqlAlchemyWorldStateRepository` is the MVP implementation (SQLite via
-SQLAlchemy Core, URL from DATABASE_URL). A SAP HANA Cloud adapter would be a
-different URL/dialect behind the same interface — the schema is one row per
-simulation with the full state as JSON plus indexed columns, which is a valid
-HANA table design as-is.
+`SqlAlchemyWorldStateRepository` implements it on SQLAlchemy Core, for any
+database SQLAlchemy has a dialect for. Which one is `backend/database/engine.py`'s
+business: DATABASE_URL, or a bound SAP HANA Cloud instance on BTP, or SQLite.
+The schema is one row per simulation with the full state as JSON plus indexed
+columns, and it compiles to valid HANA DDL as-is (`python -m backend.database.ddl`).
 
 The repository does no business logic: it stores what it is handed and
 enforces exactly one thing, optimistic concurrency — `save` only succeeds if
@@ -14,18 +14,19 @@ the row is still at the version the caller read.
 from __future__ import annotations
 
 import json
-import os
+import logging
 import threading
 from datetime import datetime
 from typing import Protocol
 
-from sqlalchemy import Column, ForeignKey, Integer, MetaData, String, Table, Text, create_engine, delete, insert, select, update
+from sqlalchemy import Column, ForeignKey, Integer, MetaData, String, Table, Text, delete, insert, select, update
+from sqlalchemy.engine import URL
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.pool import StaticPool
 
+from backend.database.engine import DEFAULT_DATABASE_URL, build_engine, env_flag, resolve_database_target  # noqa: F401 — DEFAULT_DATABASE_URL was defined here
 from backend.schemas.world_state import CheckpointRecord, SimulationSummary, WorldState
 
-DEFAULT_DATABASE_URL = "sqlite:///./resilientsc.db"
+logger = logging.getLogger("resilientsc.database")
 
 
 class SimulationNotFoundError(LookupError):
@@ -41,6 +42,8 @@ class ConcurrentModificationError(RuntimeError):
 
     error_code = "STATE_CONFLICT"
 
+
+ACTOR_MAX_LENGTH = 256
 
 metadata = MetaData()
 
@@ -62,7 +65,7 @@ checkpoints = Table(
     Column("simulation_id", String(64), ForeignKey("world_states.simulation_id"), nullable=False, index=True),
     Column("version", Integer, nullable=False),
     Column("checkpoint", String(64), nullable=False),
-    Column("actor", String(64), nullable=False),
+    Column("actor", String(ACTOR_MAX_LENGTH), nullable=False),  # an approver's name or e-mail address goes here; HANA enforces the length
     Column("at", String(40), nullable=False),
     Column("changed_fields", Text, nullable=False),
 )
@@ -84,17 +87,17 @@ class WorldStateRepository(Protocol):
 
 
 class SqlAlchemyWorldStateRepository:
-    def __init__(self, database_url: str | None = None):
-        url = database_url or os.environ.get("DATABASE_URL", DEFAULT_DATABASE_URL)
-        options: dict = {}
-        if url.startswith("sqlite"):
-            options["connect_args"] = {"check_same_thread": False, "timeout": 30}
-            if url in ("sqlite://", "sqlite:///:memory:"):
-                options["poolclass"] = StaticPool  # one shared connection, or every checkout would see a fresh empty DB
-        self._engine = create_engine(url, **options)
+    def __init__(self, database_url: str | URL | None = None, *, schema: str | None = None, auto_create: bool | None = None):
+        """`auto_create` (env DATABASE_AUTO_CREATE, default true) creates the two tables if they are missing. Turn it
+        off where the application's database user may not run DDL — an HDI container on HANA Cloud — and create the
+        tables from `python -m backend.database.ddl` instead."""
+        target = resolve_database_target(database_url, schema)
+        self._engine = build_engine(target)
+        logger.info("world-state database: %s", target.describe(), extra={"event": "database_target"})
         # a single in-memory connection is not safe to use from two threads at once
         self._lock = threading.RLock()
-        metadata.create_all(self._engine)
+        if auto_create if auto_create is not None else env_flag("DATABASE_AUTO_CREATE", True):
+            metadata.create_all(self._engine)
 
     def create(self, state: WorldState, *, actor: str) -> None:
         payload = state.model_dump_json()

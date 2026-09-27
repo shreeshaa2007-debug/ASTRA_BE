@@ -16,7 +16,7 @@ import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
-from typing import Any, Callable, Protocol
+from typing import Any, Callable, Mapping, Protocol
 
 from backend.monitoring.metrics import metrics
 
@@ -183,3 +183,36 @@ class GeminiClient:
 
     def _scrub(self, text: str) -> str:
         return text.replace(self._api_key, "***")
+
+
+# --------------------------------------------------------------------------- #
+# which model provider
+# --------------------------------------------------------------------------- #
+# LLM_PROVIDER picks the client (default `gemini`). A provider is a factory taking the `llm:` section of
+# sensing_config.yaml and returning an `LLMClient`, plus a cheap test for "is it configured" that reads no secret and
+# makes no call. On SAP BTP the natural second provider is SAP AI Core's generative-AI hub: one class implementing
+# `generate_json`, registered here — nothing else in the Sensing Agent changes (docs/sap-readiness.md).
+_PROVIDERS: dict[str, tuple[Callable[[dict], "LLMClient"], Callable[[Mapping[str, str]], bool]]] = {}
+
+
+def register_llm_provider(name: str, factory: Callable[[dict], "LLMClient"], configured: Callable[[Mapping[str, str]], bool]) -> None:
+    _PROVIDERS[name.strip().lower()] = (factory, configured)
+
+
+def llm_provider_name(env: Mapping[str, str] | None = None) -> str:
+    return ((os.environ if env is None else env).get("LLM_PROVIDER") or "gemini").strip().lower()
+
+
+def build_llm_from_env(llm_config: dict | None = None, env: Mapping[str, str] | None = None) -> "LLMClient":
+    name = llm_provider_name(env)
+    if name not in _PROVIDERS:
+        raise LLMUnavailableError(f"LLM_PROVIDER {name!r} is not a known provider; known: {sorted(_PROVIDERS)}")
+    return _PROVIDERS[name][0](llm_config or {})
+
+
+def llm_configured(env: Mapping[str, str] | None = None) -> bool:
+    entry = _PROVIDERS.get(llm_provider_name(env))
+    return bool(entry and entry[1](os.environ if env is None else env))
+
+
+register_llm_provider("gemini", GeminiClient.from_env, lambda env: bool(env.get("LLM_API_KEY")))

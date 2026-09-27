@@ -1,25 +1,23 @@
 """Logistics Agent tool functions — per agent-plan.md: get_routes(),
 check_route_capacity(), calculate_transport_cost(), calculate_eta(),
-generate_alternative_routes(). Reads data/processed/routes.csv (Phase 3/7 —
+generate_alternative_routes(). Reads the `routes` dataset (Phase 3/7 —
 real port coordinates, documented-heuristic cost/time, see
-backend/services/preprocessing/ports_routes.py). No shared world state exists
+backend/services/preprocessing/ports_routes.py) through backend/data, so
+it comes from routes.csv or a `ref_routes` table. No shared world state exists
 yet (Phase 12), so "which routes are currently disrupted" is passed in as a
 parameter here rather than read from live state — the same pattern the
 Inventory Agent uses.
 """
 from __future__ import annotations
 
-from functools import lru_cache
-from pathlib import Path
-
 import pandas as pd
 
-ROUTES_PATH = Path("data/processed/routes.csv")
+from backend.data import cached_dataset_loader, get_datasets
 
 
-@lru_cache(maxsize=1)
+@cached_dataset_loader()
 def _load_routes() -> pd.DataFrame:
-    return pd.read_csv(ROUTES_PATH)
+    return get_datasets().load("routes")
 
 
 def get_routes(
@@ -73,12 +71,25 @@ def calculate_transport_cost(route_id: str, quantity: int) -> float:
     return round(float(row.iloc[0]["cost_per_unit"]) * quantity, 2)
 
 
-def calculate_eta(route_id: str, departure_date: str | pd.Timestamp) -> str:
+def calculate_eta(route_id: str, departure_date: str | pd.Timestamp, include_port_delay: bool = True) -> str:
     df = _load_routes()
     row = df[df["route_id"] == route_id]
     if row.empty:
         raise ValueError(f"Unknown route_id {route_id!r}")
     transit_days = float(row.iloc[0]["transit_time_days"])
+    if include_port_delay:
+        try:
+            from backend.services.ports_realtime import get_port_realtime_service
+            svc = get_port_realtime_service()
+            origin = str(row.iloc[0].get("origin", ""))
+            # Check port delay for origin or route corridors
+            ports = svc.extract_realtime_ports(force_refresh=False)
+            for p in ports:
+                if origin.lower() in p["port_name"].lower() or p["port_id"].lower() in route_id.lower():
+                    transit_days += float(p.get("estimated_delay_days", 0.0))
+                    break
+        except Exception:
+            pass
     eta = pd.Timestamp(departure_date) + pd.Timedelta(days=transit_days)
     return str(eta.date())
 

@@ -10,6 +10,8 @@ Environment (all optional):
     E2E_LLM_DELAY      seconds the "LLM" takes to answer — a window to act in while sensing runs
     E2E_AGENT_DELAY    seconds added to the agents step — a window in which the state is RUNNING
     E2E_LLM=real       use the production wiring instead (needs LLM_API_KEY): the opt-in live tests
+    E2E_WIRING=default the production wiring (`build_default_context`: DATABASE_URL, DATA_BACKEND, EVENTS_* from the environment;
+                       AUTH_* is always read from it) with only the LLM scripted — the SAP-readiness tests use this
     E2E_LLM_FAIL=1     every LLM call fails as if the provider were down (behind the same circuit breaker production uses)
     E2E_EXTRA_REQUIRED_FILE   a path readiness must find: point it at nothing to make the process "alive but not ready"
 """
@@ -89,6 +91,12 @@ def _slow_down_the_agents(seconds: float) -> None:
 def build():
     if os.environ.get("E2E_LLM") == "real":
         return create_app(context=build_default_context())
+    if os.environ.get("E2E_WIRING") == "default":
+        context = build_default_context()
+        breaker = load_settings()["llm"]
+        context.orchestrator.sensing._llm = CircuitBreakerLLM(  # the one substitution: what the model says, not how it is wrapped
+            ScriptedLLM(), int(breaker["circuit_failure_threshold"]), float(breaker["circuit_cooldown_seconds"]))
+        return create_app(context=context)
     if os.environ.get("E2E_AGENT_DELAY"):
         _slow_down_the_agents(float(os.environ["E2E_AGENT_DELAY"]))
     store = WorldStateStore(SqlAlchemyWorldStateRepository())  # DATABASE_URL

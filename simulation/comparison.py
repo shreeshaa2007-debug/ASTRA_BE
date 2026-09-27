@@ -27,12 +27,12 @@ import math
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from functools import lru_cache
 from typing import Literal, Mapping, Optional
 
 from pydantic import BaseModel, Field
 
 from backend.agents.sourcing import tools as sourcing_tools
+from backend.data import cached_dataset_loader
 from backend.optimization import tools as optimization_tools
 from backend.optimization.engine import OptimizationEngine
 from backend.orchestration import adapters
@@ -106,7 +106,7 @@ def _solve(product_id: str, as_of_date: Optional[str], world: WorldSpec, engine:
     return Solved(optimization_tools.optimize_supply_chain(problem, engine), out.forecast_model_version)
 
 
-@lru_cache(maxsize=128)
+@cached_dataset_loader(maxsize=128)  # derived from the datasets, so switching the data backend must empty it
 def _solve_cached(product_id: str, as_of_date: Optional[str], world: WorldSpec) -> Solved:
     return _solve(product_id, as_of_date, world, None)
 

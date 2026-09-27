@@ -23,10 +23,14 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
+from backend.agents.sensing.llm import llm_configured
 from backend.api.context import AppContext, build_default_context, make_state
 from backend.api.errors import install_error_handlers
-from backend.api.routers import decisions, network, ops, scenarios, simulations
+from backend.api.routers import decisions, integration, network, ops, ports, scenarios, simulations
+from backend.api.security import Authenticator, NoAuthenticator, build_authenticator_from_env
 from backend.monitoring import configure_logging, load_settings, metrics, request_id_var
+from backend.sap.btp import running_on_btp
+from backend.sap.sbpa_bridge import make_sbpa_callback_router
 
 DEFAULT_CORS_ORIGINS = ["http://localhost:5173", "http://127.0.0.1:5173"]
 
@@ -42,6 +46,7 @@ def create_app(
     compliance_rules: dict | None = None,
     run_inline: bool = False,
     cors_origins: list[str] | None = None,
+    authenticator: Authenticator | None = None,
 ) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -57,6 +62,11 @@ def create_app(
     )
     settings = load_settings()
     configure_logging(settings["logging"]["level"], settings["logging"]["format"])  # idempotent; until now nothing configured a handler, so INFO was dropped
+    # built now, not on the first request: a misconfigured identity provider must stop the app from starting, not fail open
+    app.state.authenticator = authenticator if authenticator is not None else build_authenticator_from_env()
+    logger.info("authentication: %s", app.state.authenticator.describe(), extra={"event": "authentication_mode"})
+    if isinstance(app.state.authenticator, NoAuthenticator) and running_on_btp():
+        logger.warning("authentication is OFF on SAP BTP: every caller can approve plans (unset AUTH_MODE, or bind an xsuaa instance)")
     make_state(app, (lambda: context) if context is not None else (lambda: build_default_context(compliance_rules=compliance_rules, run_inline=run_inline)))
 
     origins = cors_origins or [o.strip() for o in os.environ.get("CORS_ORIGINS", "").split(",") if o.strip()] or DEFAULT_CORS_ORIGINS
@@ -94,10 +104,16 @@ def create_app(
 
     @app.get("/api/health", tags=["meta"])
     def health():
-        return {"status": "ok", "mode": "live", "llm_configured": bool(os.environ.get("LLM_API_KEY"))}
+        return {"status": "ok", "mode": "live", "llm_configured": llm_configured()}
 
-    for router in (simulations.router, decisions.router, network.router, scenarios.router, ops.router):
+    for router in (simulations.router, decisions.router, network.router, scenarios.router, ops.router, integration.router, ports.router):
         app.include_router(router)
+    app.include_router(make_sbpa_callback_router())  # SAP Build Process Automation callback
+
+    # Built-in Approval Portal — replaces SBPA when SBPA_WEBHOOK_URL is not set
+    from backend.sap.approval_portal import make_approval_router
+    app.include_router(make_approval_router())
+
     return app
 
 

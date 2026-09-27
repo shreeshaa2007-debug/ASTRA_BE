@@ -7,8 +7,9 @@ from fastapi import APIRouter, Depends
 from backend.api import views
 from backend.api.context import AppContext, get_ctx
 from backend.api.models import DecisionRequest
+from backend.api.security import APPROVE, VIEW, Principal, decided_by, require
 
-router = APIRouter(prefix="/api", tags=["decisions"])
+router = APIRouter(prefix="/api", tags=["decisions"], dependencies=[Depends(require(VIEW))])
 
 
 def envelope(data):
@@ -35,13 +36,13 @@ def _decision_response(state) -> dict:
 
 
 @router.post("/decisions/{simulation_id}/approve")
-def approve(simulation_id: str, body: DecisionRequest, ctx: AppContext = Depends(get_ctx)):
+def approve(simulation_id: str, body: DecisionRequest, ctx: AppContext = Depends(get_ctx), principal: Principal = Depends(require(APPROVE))):
     """A named human approves the escalated plan, which finalizes it. Pass `expected_version` — the
     version you were shown — to be refused if the plan has since changed."""
-    return envelope(_decision_response(ctx.orchestrator.approve(simulation_id, body.decided_by, body.note, expected_version=body.expected_version)))
+    return envelope(_decision_response(ctx.orchestrator.approve(simulation_id, decided_by(principal, body.decided_by), body.note, expected_version=body.expected_version)))
 
 
 @router.post("/decisions/{simulation_id}/reject")
-def reject(simulation_id: str, body: DecisionRequest, ctx: AppContext = Depends(get_ctx)):
+def reject(simulation_id: str, body: DecisionRequest, ctx: AppContext = Depends(get_ctx), principal: Principal = Depends(require(APPROVE))):
     """A named human rejects the escalated plan; the simulation ends REJECTED."""
-    return envelope(_decision_response(ctx.orchestrator.reject(simulation_id, body.decided_by, body.note, expected_version=body.expected_version)))
+    return envelope(_decision_response(ctx.orchestrator.reject(simulation_id, decided_by(principal, body.decided_by), body.note, expected_version=body.expected_version)))

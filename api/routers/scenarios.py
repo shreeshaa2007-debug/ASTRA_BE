@@ -16,10 +16,11 @@ from pydantic import BaseModel, Field
 from backend.agents.inventory import tools as inventory_tools
 from backend.api.context import AppContext, get_ctx
 from backend.api.errors import ApiError
+from backend.api.security import OPERATE, VIEW, require
 from backend.services.world_state import load_baseline
 from backend.simulation import compare_scenario, get_scenario, load_scenarios
 
-router = APIRouter(prefix="/api", tags=["scenarios"])
+router = APIRouter(prefix="/api", tags=["scenarios"], dependencies=[Depends(require(VIEW))])
 
 
 def envelope(data):
@@ -60,7 +61,7 @@ def scenario_comparison(scenario_id: str, product_id: Optional[str] = None, as_o
     return envelope(compare_scenario(scenario, product, as_of_date).model_dump(mode="json"))
 
 
-@router.post("/scenarios/{scenario_id}/run", status_code=202)
+@router.post("/scenarios/{scenario_id}/run", status_code=202, dependencies=[Depends(require(OPERATE))])
 def run_scenario(scenario_id: str, body: RunScenarioRequest | None = None, ctx: AppContext = Depends(get_ctx)):
     """Creates a simulation for the scenario and runs the full pipeline on it — the Sensing Agent
     skips the LLM for a structured trigger but still validates it. Poll the returned status_url."""

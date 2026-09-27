@@ -15,12 +15,11 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 from datetime import datetime, timezone
 from typing import Any, Callable, Mapping
 
 from backend.agents.sensing import tools
-from backend.agents.sensing.llm import CircuitBreakerLLM, GeminiClient, LLMClient, LLMUnavailableError
+from backend.agents.sensing.llm import CircuitBreakerLLM, LLMClient, LLMUnavailableError, build_llm_from_env, llm_configured
 from backend.monitoring.metrics import metrics
 from backend.monitoring.settings import load_settings
 from backend.schemas.sensing import SensingCatalog, SensingResult
@@ -52,14 +51,14 @@ class SensingAgent:
         if self._llm is None:  # built on first use, so a pre-structured simulated trigger works with no API key
             breaker = load_settings()["llm"]
             self._llm = CircuitBreakerLLM(
-                GeminiClient.from_env(self.config["llm"]), int(breaker["circuit_failure_threshold"]), float(breaker["circuit_cooldown_seconds"]))
+                build_llm_from_env(self.config["llm"]), int(breaker["circuit_failure_threshold"]), float(breaker["circuit_cooldown_seconds"]))
         return self._llm
 
     def llm_status(self) -> dict:
         """For the readiness check: whether a model can be called at all, and whether its circuit breaker is holding it off.
         Reads no key and makes no call."""
         state = getattr(self._llm, "circuit_state", None)
-        return {"configured": self._llm is not None or bool(os.environ.get("LLM_API_KEY")), "circuit": state() if callable(state) else "closed"}
+        return {"configured": self._llm is not None or llm_configured(), "circuit": state() if callable(state) else "closed"}
 
     def sense(self, raw: str | Mapping[str, Any]) -> SensingResult:
         result = self._sense(raw)

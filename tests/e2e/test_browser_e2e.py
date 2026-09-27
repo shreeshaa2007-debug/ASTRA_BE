@@ -210,3 +210,69 @@ def test_the_ui_survives_the_backend_going_away_and_recovers_without_a_reload(ma
     assert has(r["upHeader"], "API Connected") and r["retry"] == "ok"
     assert has(r["recoveredDashboard"], "ROUTES AVAILABLE") and not has(r["recoveredDashboard"], "API_UNREACHABLE")  # back, with no reload
     assert has(r["recoveredScenarios"], "Suez Canal Closure") and r["problems"] == []
+
+
+# =========================================================================== #
+def test_the_logistics_map_draws_the_network_labels_it_and_frames_what_you_filter_to(stack, api, browser):
+    """The map is a picture of the API's routes: as many lines as routes, the plan's lane animated and widest, the closed canal marked,
+    every port named without hovering, and a filter that zooms to what it leaves. The lane geometry is checked against the land
+    polygons elsewhere (test_map_lanes.py); this checks what a person actually sees."""
+    sim = start_scenario(api, "SUEZ_CLOSURE")
+    finish(api, sim)
+    routes = data(api.get(f"/api/routes?simulation_id={sim}"))["routes"]
+    planned = [r for r in routes if (r["planned_quantity"] or 0) > 0]
+    disrupted = [r for r in routes if r["status"] == "DISRUPTED"]
+    assert len(routes) == 8 and planned and len(disrupted) == 4, "the scenario should give a plan on a lane and four closed lanes"
+
+    r = browser.run("map", {"baseUrl": stack.web.url, "simId": sim})
+    assert_clean(r)
+    a = r["views"]["all"]
+
+    # one line per route (each has an invisible wide twin to hover), the plan's lane animated, the buttons counting what the API says
+    assert a["hitPaths"] == len(routes) and a["flowing"] >= 1
+    assert a["buttons"] == [f"All ({len(routes)})", f"Disrupted ({len(disrupted)})", f"Carrying plan ({len(planned)})"] and a["pressed"] == [f"All ({len(routes)})"]
+    assert a["legend"]  # says the paths are schematic: they are not vessel tracks
+    assert a["minVertices"] >= 10, a["minVertices"]  # the browser draws the generated lanes (through the straits), not a straight line between two ports
+
+    # every port is named without hovering; the closed canal says so; the chokepoints the lanes pass are marked
+    names = " | ".join(label["text"] for label in a["labels"])
+    for port in ("Rotterdam", "Shanghai", "Singapore", "Mumbai", "Chennai"):
+        assert port in names, names
+    assert "Suez Canal · CLOSED" in names and "Cape of Good Hope" in names and "Bab-el-Mandeb" in names and "Malacca" in names, names
+    m = a["map"]
+    for label in (x for x in a["labels"] if "map-label-port" in x["cls"]):  # a name cut off by the map's edge is unreadable
+        assert m["left"] <= label["left"] and label["right"] <= m["right"] and m["top"] <= label["top"] and label["bottom"] <= m["bottom"], label
+
+    # the disrupted list is a badge that opens on demand, not a panel sitting on the Mediterranean
+    assert r["listClosedAtFirst"] and r["badgeClick"] == "ok" and r["listOpen"] and r["listClosedAgain"]
+    assert any(b.lower().startswith(f"{len(disrupted)} disrupted") for b in a["badge"])
+
+    # hovering the plan's lane says what it is and what the plan puts on it
+    assert r["tooltipText"] and planned[0]["route_id"] in r["tooltipText"] and f"plan: {n(planned[0]['planned_quantity'])} units" in r["tooltipText"], r["tooltipText"]
+
+    # each filter draws what the API says it should, and "Carrying plan" zooms in on the lane it leaves
+    v = r["views"]
+    assert v["plan"]["hitPaths"] == len(planned) and v["disrupted"]["hitPaths"] == len(disrupted) and v["all2"]["hitPaths"] == len(routes)
+    assert v["plan"]["pressed"] == [f"Carrying plan ({len(planned)})"]
+    plan_names = " | ".join(x["text"] for x in v["plan"]["labels"])
+    assert "Suez Canal" not in plan_names and "Cape of Good Hope" in plan_names, plan_names  # the closed canal is not on the plan's lane
+    # every filter frames everything it draws, with a margin (the picture is never cut off by the map's edge)...
+    for name in ("all", "plan", "disrupted"):
+        e, box = v[name]["extent"], v[name]["map"]
+        assert e and box["left"] < e["left"] - 10 and e["right"] < box["right"] + 1 and box["top"] < e["top"] - 10 and e["bottom"] < box["bottom"] + 1, (name, e, box)
+
+    # ...and a smaller set is framed tighter: without the Cape lanes the same two ports sit further apart on screen
+    def apart(view):
+        centre = {x["text"]: ((x["left"] + x["right"]) / 2, (x["top"] + x["bottom"]) / 2) for x in v[view]["labels"] if "map-label-port" in x["cls"]}
+        (x1, y1), (x2, y2) = centre["Rotterdam"], centre["Shanghai"]
+        return ((x1 - x2) ** 2 + (y1 - y2) ** 2) ** 0.5
+
+    assert apart("disrupted") > apart("all") * 1.05, (apart("disrupted"), apart("all"))
+    assert "Suez Canal · CLOSED" in " | ".join(x["text"] for x in v["disrupted"]["labels"])
+
+    # sea names appear only where there is room for them
+    oceans = {"atlantic ocean", "indian ocean", "pacific ocean", "southern ocean"}  # (innerText is CSS-uppercased)
+    assert len(v["plan"]["oceanLabels"]) >= len(a["oceanLabels"]) and {x.lower() for x in a["oceanLabels"]} <= oceans
+
+    # clicking a route on the dashboard opens it in Logistics, with that route's facts
+    assert r["routeClick"] == "ok" and has(r["afterClick"], "Logistics Network") and planned[0]["route_id"] in r["afterClick"]

@@ -5,7 +5,8 @@ api-plan.md, never as a stack trace or a bare FastAPI `{"detail": ...}`:
 
 Error codes are the api-plan.md list plus the ones the build turned up
 (STATE_CONFLICT, INVALID_STATE_TRANSITION, CHECKPOINT_VIOLATION, RUN_IN_PROGRESS,
-PLAN_NOT_READY, INTERNAL_ERROR, LLM_UNAVAILABLE, NOT_FOUND). The world-state
+PLAN_NOT_READY, INTERNAL_ERROR, LLM_UNAVAILABLE, NOT_FOUND) and the three of authentication
+(UNAUTHENTICATED 401, FORBIDDEN 403, AUTH_UNAVAILABLE 503). The world-state
 errors already carry their `error_code`, so mapping them is a status lookup.
 """
 from __future__ import annotations
@@ -19,6 +20,7 @@ from sqlalchemy.exc import OperationalError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from backend.agents.sensing.llm import LLMUnavailableError
+from backend.data import DatasetUnavailableError
 from backend.monitoring import request_id_var
 from backend.simulation.scenarios import ScenarioNotModeledError, UnknownScenarioError
 from backend.services.world_state import (
@@ -39,24 +41,28 @@ RECOVERY = {
     "CHECKPOINT_VIOLATION": "The simulation is not in a state where this is allowed; check GET /api/simulations/{id}/status.",
     "RUN_IN_PROGRESS": "Poll GET /api/simulations/{id}/status until the run finishes.",
     "PLAN_NOT_READY": "Run the simulation first: POST /api/simulations/{id}/run.",
-    "DATASET_UNAVAILABLE": "Build data/processed/ by running the preprocessing pipeline (Phases 3-5).",
+    "DATASET_UNAVAILABLE": "Build data/processed/ by running the preprocessing pipeline (Phases 3-5) — or, with DATA_BACKEND=sql, load the ref_* tables with scripts/load_reference_data.py.",
     "MODEL_UNAVAILABLE": "Train and register the forecasting model (ml/training).",
-    "LLM_UNAVAILABLE": "Check LLM_API_KEY / LLM_MODEL and network access, then retry.",
+    "LLM_UNAVAILABLE": "Check LLM_PROVIDER, LLM_API_KEY / LLM_MODEL and network access, then retry.",
     "VALIDATION_ERROR": "Fix the request and retry.",
     "DATABASE_UNAVAILABLE": "Check DATABASE_URL and that the database is reachable; GET /api/ready reports which dependency is down.",
     "SCENARIO_NOT_FOUND": "List the scenarios with GET /api/scenarios.",
     "SCENARIO_NOT_MODELED": "Pick a scenario whose \"modeled\" is true in GET /api/scenarios; the others say why they cannot be simulated yet.",
+    "UNAUTHENTICATED": "Send a valid bearer token (Authorization: Bearer <token>). Behind the SAP Approuter this is added for you once you are signed in.",
+    "FORBIDDEN": "Your token is valid but lacks the scope this needs; ask for the role collection that carries it. GET /api/me shows what you have.",
+    "AUTH_UNAVAILABLE": "The identity provider's signing keys could not be fetched; retry shortly, and check AUTH_JWKS_URL / the XSUAA binding.",
 }
 
 
 class ApiError(Exception):
-    def __init__(self, status_code: int, error_code: str, message: str, recovery: str | None = None):
+    def __init__(self, status_code: int, error_code: str, message: str, recovery: str | None = None, headers: dict[str, str] | None = None):
         super().__init__(message)
         self.status_code, self.error_code, self.message = status_code, error_code, message
         self.recovery = recovery or RECOVERY.get(error_code)
+        self.headers = headers or {}
 
 
-def error_response(status_code: int, error_code: str, message: str, recovery: str | None = None) -> JSONResponse:
+def error_response(status_code: int, error_code: str, message: str, recovery: str | None = None, headers: dict[str, str] | None = None) -> JSONResponse:
     body: dict = {"status": "error", "error_code": error_code, "message": message}
     recovery = recovery or RECOVERY.get(error_code)
     if recovery:
@@ -64,7 +70,7 @@ def error_response(status_code: int, error_code: str, message: str, recovery: st
     request_id = request_id_var.get()
     if request_id:  # the id that is also in every log line for this request: what a person quotes when asking what went wrong
         body["request_id"] = request_id
-    return JSONResponse(status_code=status_code, content={"error": body}, headers={"X-Request-ID": request_id} if request_id else None)
+    return JSONResponse(status_code=status_code, content={"error": body}, headers={**({"X-Request-ID": request_id} if request_id else {}), **(headers or {})} or None)
 
 
 # world-state / persistence error class -> HTTP status; the error_code comes from the exception itself
@@ -83,7 +89,7 @@ _STATUS = {
 def install_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(ApiError)
     async def _api_error(request: Request, exc: ApiError):
-        return error_response(exc.status_code, exc.error_code, exc.message, exc.recovery)
+        return error_response(exc.status_code, exc.error_code, exc.message, exc.recovery, exc.headers)
 
     for exc_class, status in _STATUS.items():
         def make(status_code: int):
@@ -104,6 +110,12 @@ def install_error_handlers(app: FastAPI) -> None:
     async def _http(request: Request, exc: StarletteHTTPException):
         code = {404: "NOT_FOUND", 405: "METHOD_NOT_ALLOWED"}.get(exc.status_code, "HTTP_ERROR")
         return error_response(exc.status_code, code, str(exc.detail))
+
+    @app.exception_handler(DatasetUnavailableError)
+    async def _missing_dataset(request: Request, exc: DatasetUnavailableError):
+        # more specific than FileNotFoundError, which it is a subclass of: the data may be a database table, not a file
+        logger.error("dataset unavailable: %s", exc)
+        return error_response(503, "DATASET_UNAVAILABLE", f"a required dataset is unavailable: {exc}")
 
     @app.exception_handler(FileNotFoundError)
     async def _missing_file(request: Request, exc: FileNotFoundError):

@@ -1,19 +1,16 @@
 """Sourcing Agent tool functions — per agent-plan.md: get_suppliers(),
 check_supplier_capacity(), calculate_supplier_cost(), calculate_landed_cost(),
-generate_supplier_options(). Reads data/processed/suppliers.csv (Phase 3/8 —
+generate_supplier_options(). Reads the `suppliers` dataset (Phase 3/8 —
 synthetic, real product_ids, see backend/services/preprocessing/suppliers.py)
-and data/processed/tariffs.csv (Phase 3 — real World Bank data, country-year
-grain) for the landed-cost tariff term.
+and the `tariffs` dataset (Phase 3 — real World Bank data, country-year
+grain) for the landed-cost tariff term, through backend/data: from the
+processed CSVs, or from `ref_suppliers` / `ref_tariffs` tables.
 """
 from __future__ import annotations
 
-from functools import lru_cache
-from pathlib import Path
-
 import pandas as pd
 
-SUPPLIERS_PATH = Path("data/processed/suppliers.csv")
-TARIFFS_PATH = Path("data/processed/tariffs.csv")
+from backend.data import cached_dataset_loader, get_datasets
 
 # suppliers.csv's `region` is a country NAME (matches the roster in
 # suppliers.py); tariffs.csv's `origin_country` is an ISO3 code (World Bank's
@@ -28,19 +25,19 @@ REGION_TO_ISO3 = {
 }
 
 
-@lru_cache(maxsize=1)
+@cached_dataset_loader()
 def _load_suppliers() -> pd.DataFrame:
-    df = pd.read_csv(SUPPLIERS_PATH)
+    df = get_datasets().load("suppliers")
     df["product_id"] = df["product_id"].astype(str)
     return df
 
 
-@lru_cache(maxsize=1)
+@cached_dataset_loader()
 def _load_tariffs() -> pd.DataFrame:
-    return pd.read_csv(TARIFFS_PATH)
+    return get_datasets().load("tariffs")
 
 
-@lru_cache(maxsize=1)
+@cached_dataset_loader()
 def _latest_tariff_by_country() -> dict[str, float]:
     """Most recent available tariff_rate per ISO3 country — 2022 for the
     countries this roster uses (see dataset_registry.yaml: 2023+ isn't yet

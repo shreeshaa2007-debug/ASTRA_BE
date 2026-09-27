@@ -11,8 +11,9 @@ from __future__ import annotations
 
 import logging
 import uuid
+from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Callable
+from typing import Any, Callable, Iterable
 
 from pydantic import ValidationError
 
@@ -39,6 +40,18 @@ def utc_now() -> datetime:
 logger = logging.getLogger("resilientsc.world_state")
 
 
+@dataclass(frozen=True)
+class StateChange:
+    """What a listener is told after a change is durable: which checkpoint, the state it produced, and who did it."""
+
+    checkpoint: str
+    state: WorldState  # a private copy per listener: none can alter what the next one sees
+    actor: str
+
+
+StateListener = Callable[[StateChange], None]
+
+
 class WorldStateStore:
     def __init__(
         self,
@@ -46,10 +59,18 @@ class WorldStateStore:
         *,
         baseline_loader: Callable[[], Baseline] = load_baseline,
         clock: Callable[[], datetime] = utc_now,
+        listeners: Iterable[StateListener] = (),
     ):
         self._repo = repository
         self._baseline_loader = baseline_loader
         self._clock = clock
+        self._listeners: list[StateListener] = list(listeners)
+
+    def add_listener(self, listener: StateListener) -> None:
+        """Be told about every change once it is saved (the hook the SAP Integration event bridge uses). A listener
+        runs after the commit, so it can neither veto nor undo it; one that raises is logged and counted and does not
+        affect the commit, the caller, or the other listeners."""
+        self._listeners.append(listener)
 
     # ---- CREATE ---------------------------------------------------------- #
     def create(self, scenario_type: str, *, simulation_id: str | None = None, baseline: Baseline | None = None, actor: str = DEFAULT_ACTOR) -> WorldState:
@@ -73,13 +94,19 @@ class WorldStateStore:
         self._record("simulation_created", state, actor)
         return self.get(state.simulation_id)
 
-    @staticmethod
-    def _record(checkpoint: str, state: WorldState, actor: str) -> None:
+    def _record(self, checkpoint: str, state: WorldState, actor: str) -> None:
         """Every change to a simulation is a checkpoint; each leaves a log line and a count, so the log is the audit trail's twin."""
         metrics.inc("checkpoints_total", {"checkpoint": checkpoint})
         logger.info("checkpoint %s -> %s (v%d, by %s)", checkpoint, state.status.value, state.version, actor,
                     extra={"event": "checkpoint", "simulation_id": state.simulation_id, "checkpoint": checkpoint, "status": state.status.value,
                            "version": state.version, "actor": actor})
+        for listener in list(self._listeners):
+            try:
+                listener(StateChange(checkpoint, state.model_copy(deep=True), actor))
+            except Exception:  # noqa: BLE001 — the change is already saved; nothing a listener does may un-do or fail it
+                metrics.inc("state_listener_errors_total", {"checkpoint": checkpoint})
+                logger.exception("a state listener failed on checkpoint %s", checkpoint,
+                                 extra={"event": "state_listener_error", "simulation_id": state.simulation_id, "checkpoint": checkpoint})
 
     # ---- GET ------------------------------------------------------------- #
     def get(self, simulation_id: str) -> WorldState:
