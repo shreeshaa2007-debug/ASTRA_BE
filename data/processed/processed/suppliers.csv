@@ -1,0 +1,18 @@
+supplier_id,supplier_name,region,product_id,capacity,unit_cost,lead_time_days,reliability,risk_level,status,provenance
+S001,Chengdu Precision Components,China,23166,0,100.36,7,0.58,HIGH,DISRUPTED,synthetic
+S001,Chengdu Precision Components,China,84077,0,111.64,10,0.61,HIGH,DISRUPTED,synthetic
+S002,Shenzhen Circuit Works,China,22197,7853,117.44,10,0.63,HIGH,REDUCED,synthetic
+S002,Shenzhen Circuit Works,China,84077,7136,104.41,9,0.33,HIGH,REDUCED,synthetic
+S003,Pune Industrial Fabricators,India,23166,7326,111.53,9,0.98,LOW,ACTIVE,synthetic
+S003,Pune Industrial Fabricators,India,22197,7913,91.81,6,0.86,LOW,ACTIVE,synthetic
+S004,Chennai Component Systems,India,22197,7779,118.86,7,0.84,LOW,ACTIVE,synthetic
+S004,Chennai Component Systems,India,84077,5557,89.55,6,0.86,LOW,ACTIVE,synthetic
+S005,Hanoi Assembly Group,Vietnam,22197,4911,114.14,9,0.82,MEDIUM,ACTIVE,synthetic
+S005,Hanoi Assembly Group,Vietnam,84077,6014,98.56,9,0.82,MEDIUM,ACTIVE,synthetic
+S006,Ho Chi Minh Precision Ltd,Vietnam,23166,4019,92.0,10,0.94,MEDIUM,ACTIVE,synthetic
+S006,Ho Chi Minh Precision Ltd,Vietnam,22197,5715,112.33,4,0.86,MEDIUM,ACTIVE,synthetic
+S006,Ho Chi Minh Precision Ltd,Vietnam,84077,4019,89.01,7,0.86,MEDIUM,ACTIVE,synthetic
+S007,Istanbul Trade Manufacturing,Turkey,23166,4912,107.22,9,0.88,MEDIUM,ACTIVE,synthetic
+S007,Istanbul Trade Manufacturing,Turkey,22197,3759,86.08,6,0.8,MEDIUM,ACTIVE,synthetic
+S007,Istanbul Trade Manufacturing,Turkey,84077,5133,93.19,7,0.76,MEDIUM,ACTIVE,synthetic
+S008,Rotterdam Regional Supply,Netherlands,84077,3514,112.44,11,0.85,LOW,ACTIVE,synthetic

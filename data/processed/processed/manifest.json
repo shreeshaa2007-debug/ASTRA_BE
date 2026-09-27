@@ -1,0 +1,130 @@
+{
+  "generated_at": "2026-09-23T10:45:30.760891+00:00",
+  "steps": {
+    "demand_clean": {
+      "input_rows": 541909,
+      "exact_duplicates_dropped": 5268,
+      "invalid_dates_dropped": 0,
+      "cancelled_or_return_rows_excluded": 10587,
+      "non_product_stockcodes_excluded": 2322,
+      "unspecified_location_rows_excluded": 499,
+      "quantity_outliers_flagged": 19332,
+      "output_rows": 523233,
+      "daily_panel_rows": 302884,
+      "unique_products": 3822,
+      "unique_locations": 36,
+      "date_range": [
+        "2010-12-01",
+        "2011-12-09"
+      ]
+    },
+    "disruptions": {
+      "input_rows": 69801,
+      "unparseable_begin_dates": 0,
+      "dropped_unparseable_dates": 0,
+      "output_rows": 69801,
+      "curated_events_added": 4,
+      "combined_rows": 69805,
+      "validation": {
+        "rows_checked": 200,
+        "validation_errors": [],
+        "error_count": 0
+      }
+    },
+    "demand_features": {
+      "output_rows": 302884,
+      "split_counts": {
+        "train": 185856,
+        "test": 65701,
+        "val": 51327
+      },
+      "validation": {
+        "rows_checked": 200,
+        "validation_errors": [],
+        "error_count": 0
+      }
+    },
+    "tariffs": {
+      "input_countries_and_aggregates": 265,
+      "regional_aggregates_dropped": 48,
+      "rows_before_missing_drop": 14322,
+      "rows_after_missing_drop": 3771,
+      "output_rows": 3771,
+      "countries_with_any_data": 188,
+      "most_recent_year_with_broad_coverage": 2022,
+      "validation": {
+        "rows_checked": 200,
+        "validation_errors": [],
+        "error_count": 0
+      }
+    },
+    "ports": {
+      "input_dbf_rows": 3669,
+      "output_rows": 3669,
+      "dropped_missing_or_zero_coords": 0,
+      "validation": {
+        "rows_checked": 200,
+        "validation_errors": [],
+        "error_count": 0
+      }
+    },
+    "routes": {
+      "output_rows": 8,
+      "provenance_note": "SEA distance_km/transit_time_days: derived from real WPI port coordinates + a stated 18-knot service-speed assumption. RAIL distance/transit_time: the real China-Europe Railway Express service's publicly reported range (~11,000 km, ~15-18 days), applied to Shanghai only \u2014 the corridor's real origin region \u2014 with Rotterdam standing in for the service's real terminus, Duisburg (~225 km further inland). AIR distance: real great-circle (correct physical model for aircraft). capacity/cost_per_unit for all modes: no public source exists (see dataset_registry.yaml); rail/air costs are sea cost x a documented multiplier (~2x, ~6x) taken from publicly reported typical ranges, not independently invented. Record-level provenance is SYNTHETIC throughout to reflect the weakest link (capacity/cost), even where distance is real-coordinate-derived.",
+      "modes": [
+        "air",
+        "rail",
+        "sea"
+      ],
+      "validation": {
+        "rows_checked": 8,
+        "validation_errors": [],
+        "error_count": 0
+      }
+    },
+    "inventory": {
+      "output_rows": 302884,
+      "products_covered": 3822,
+      "stockout_days": 64,
+      "policy": {
+        "target_days_of_cover": 30,
+        "safety_days": 10,
+        "replenish_days": 21
+      },
+      "validation": {
+        "rows_checked": 200,
+        "validation_errors": [],
+        "error_count": 0
+      }
+    },
+    "suppliers": {
+      "output_rows": 17,
+      "seed": 42,
+      "unique_suppliers": 8,
+      "unique_products": 3,
+      "validation": {
+        "rows_checked": 17,
+        "validation_errors": [],
+        "error_count": 0
+      }
+    }
+  },
+  "provenance_summary": {
+    "real": [
+      "demand.csv (base fields)",
+      "disruptions.csv (NOAA rows)",
+      "tariffs.csv",
+      "ports.csv"
+    ],
+    "derived": [
+      "inventory.csv",
+      "routes.csv (distance/transit_time from real coordinates)"
+    ],
+    "synthetic": [
+      "suppliers.csv",
+      "routes.csv (capacity/cost_per_unit)",
+      "disruptions.csv (curated non-weather rows \u2014 real events, authored records)"
+    ]
+  },
+  "total_validation_errors": 0
+}

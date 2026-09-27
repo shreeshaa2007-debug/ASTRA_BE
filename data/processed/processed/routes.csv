@@ -1,0 +1,9 @@
+route_id,origin,destination,transport_mode,distance_km,capacity,transit_time_days,cost_per_unit,status,provenance
+SHA-ROT-SUEZ,Shanghai,Rotterdam,sea,11425.6,8000,14.3,137.11,NORMAL,synthetic
+SHA-ROT-CAPE,Shanghai,Rotterdam,sea,22618.8,8000,28.3,271.43,ALTERNATIVE,synthetic
+SIN-ROT-SUEZ,Singapore,Rotterdam,sea,11406.6,8000,14.3,136.88,NORMAL,synthetic
+SIN-ROT-CAPE,Singapore,Rotterdam,sea,19304.7,8000,24.1,231.66,ALTERNATIVE,synthetic
+MUM-ROT-SUEZ,Mumbai,Rotterdam,sea,7500.3,8000,9.4,90.0,NORMAL,synthetic
+CHE-ROT-SUEZ,Chennai,Rotterdam,sea,8510.3,8000,10.6,102.12,NORMAL,synthetic
+SHA-ROT-RAIL,Shanghai,Rotterdam,rail,11000.0,2000,16.5,274.22,ALTERNATIVE,synthetic
+SHA-ROT-AIR,Shanghai,Rotterdam,air,8931.2,200,1.97,822.66,ALTERNATIVE,synthetic
