@@ -1,0 +1,97 @@
+# SAP BTP (Cloud Foundry) deployment descriptor for ResilientSC.
+#
+# STATUS: written from SAP's documented formats and checked for syntax and internal consistency (docs/sap-readiness.md);
+# it has NOT been deployed — there was no BTP subaccount to deploy to. Expect to adjust plan names, buildpack and memory on
+# the first real `cf deploy`.
+#
+#   npm run build:btp --prefix frontend      builds the UI into approuter/resources (BTP mode: same origin, CSRF token)
+#   mbt build && cf deploy mta_archives/resilientsc_1.0.0.mtar
+#
+# One API instance on purpose: run records and the in-flight guard are per process (docs/architecture.md §5.3).
+_schema-version: "3.2"
+ID: resilientsc
+version: 1.0.0
+description: ResilientSC - AI-assisted supply-chain disruption response
+
+parameters:
+  enable-parallel-deployments: true
+
+modules:
+  # ---- the API (FastAPI on the Python buildpack) ----
+  - name: resilientsc-api
+    type: python
+    path: .
+    build-parameters:
+      builder: zip
+      ignore:
+        - .git/
+        - .venv/
+        - .env
+        - "*.db"
+        - frontend/
+        - approuter/
+        - docs/
+        - scripts/
+        - backend/tests/
+        - data/raw/
+        - data/interim/
+        - data/processed/
+        - "**/__pycache__/"
+        - node_modules/
+        - mta_archives/
+    parameters:
+      buildpack: python_buildpack
+      command: uvicorn backend.api.main:app --host 0.0.0.0 --port $PORT
+      memory: 1G
+      disk-quota: 2G
+      instances: 1
+      health-check-type: http
+      health-check-http-endpoint: /api/health
+    properties:
+      LOG_FORMAT: json
+      DATA_BACKEND: sql            # reference data from the ref_* tables in HANA (python scripts/load_reference_data.py)
+      DATABASE_AUTO_CREATE: "true"  # plan `schema` lets the app create its tables; with `hdi-shared`, set false and deploy db/hana/schema.sql
+      EVENTS_BACKEND: none         # log | webhook (+ EVENTS_WEBHOOK_URL ...) once an Integration Suite flow exists
+      LLM_PROVIDER: gemini         # needs LLM_API_KEY (set with `cf set-env`, never here); see docs/sap-readiness.md for AI Core
+    provides:
+      - name: resilientsc-api-dest
+        properties:
+          url: ${default-url}
+    requires:
+      - name: resilientsc-db
+      - name: resilientsc-uaa
+
+  # ---- the UI + sign-in (SAP Application Router serving the built frontend) ----
+  - name: resilientsc-approuter
+    type: approuter.nodejs
+    path: approuter
+    parameters:
+      memory: 256M
+      disk-quota: 512M
+    requires:
+      - name: resilientsc-uaa
+      - name: resilientsc-api-dest
+        group: destinations
+        properties:
+          name: resilientsc-api
+          url: ~{url}
+          forwardAuthToken: true
+
+resources:
+  # ---- SAP HANA Cloud (world state + reference data) ----
+  - name: resilientsc-db
+    type: org.cloudfoundry.managed-service
+    parameters:
+      service: hana
+      service-plan: schema
+
+  # ---- XSUAA: sign-in, scopes (View / Operate / Approve) and role collections ----
+  - name: resilientsc-uaa
+    type: org.cloudfoundry.managed-service
+    parameters:
+      service: xsuaa
+      service-plan: application
+      path: ./xs-security.json
+      config:
+        xsappname: resilientsc-${org}-${space}
+        tenant-mode: dedicated

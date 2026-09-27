@@ -1,0 +1,49 @@
+{
+  "val": {
+    "mae": 50.97758416621281,
+    "rmse": 109.41730755523027,
+    "mape": 332.8297552049911,
+    "wape": 93.64808179137793
+  },
+  "test": {
+    "mae": 66.89712610323178,
+    "rmse": 188.17523679359948,
+    "mape": 358.9188086862502,
+    "wape": 85.78001659938612
+  },
+  "disruption_period_slice": {
+    "note": "0 disruption_active rows in this dataset's date range (2010-12 to 2011-12) \u2014 none of the acquired/curated disruption events overlap it (earliest is 2019). The evaluation code path exists (see features.py's add_disruption_features) and will populate this slice the first time a training window actually overlaps a flagged disruption window \u2014 not fabricated here.",
+    "rows": 0
+  },
+  "baseline_comparison": {
+    "series_compared": 40,
+    "win_counts_by_model_lowest_val_wape": {
+      "pred_xgboost": 21,
+      "pred_exp_smoothing": 13,
+      "pred_moving_average": 4,
+      "pred_seasonal_naive": 2
+    },
+    "xgboost_series_win_count": 21,
+    "xgboost_win_rate": 0.525,
+    "mean_wape_by_model": {
+      "pred_exp_smoothing": 156.66,
+      "pred_moving_average": 117.52,
+      "pred_naive": 140.91,
+      "pred_seasonal_naive": 124.42,
+      "pred_xgboost": 107.1
+    }
+  },
+  "feature_importance_gain": {
+    "day_of_week": 64412312.0,
+    "month": 29550512.0,
+    "rolling_mean_14": 9007544.0,
+    "rolling_mean_28": 8743996.0,
+    "lag_7": 7898549.5,
+    "product_id": 2802091.5,
+    "rolling_mean_7": 1156248.0,
+    "lag_14": 1038789.875,
+    "lag_1": 974037.25,
+    "lag_2": 497084.0625,
+    "lag_28": 496580.21875
+  }
+}

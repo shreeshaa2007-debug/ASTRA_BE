@@ -1,0 +1,8 @@
+{
+  "regression_r2": 0.9982,
+  "regression_mae_hours": 2.93,
+  "regression_rmse_hours": 4.24,
+  "regression_mape_pct": 13.47,
+  "classification_accuracy": 0.9722,
+  "classification_f1": 0.9679
+}

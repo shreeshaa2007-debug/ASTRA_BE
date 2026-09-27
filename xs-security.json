@@ -1,0 +1,23 @@
+{
+  "xsappname": "resilientsc",
+  "tenant-mode": "dedicated",
+  "description": "ResilientSC: who may look at, run and approve supply-chain response plans",
+  "scopes": [
+    { "name": "$XSAPPNAME.View", "description": "Read simulations, plans, the network and operational metrics" },
+    { "name": "$XSAPPNAME.Operate", "description": "Create, run and reset simulations; send disruption signals from an integration flow" },
+    { "name": "$XSAPPNAME.Approve", "description": "Approve or reject a plan that compliance escalated to a human" }
+  ],
+  "role-templates": [
+    { "name": "Viewer", "description": "Read-only", "scope-references": ["$XSAPPNAME.View"] },
+    { "name": "Operator", "description": "Run scenarios and respond to disruptions", "scope-references": ["$XSAPPNAME.View", "$XSAPPNAME.Operate"] },
+    { "name": "Approver", "description": "Release or refuse escalated plans", "scope-references": ["$XSAPPNAME.View", "$XSAPPNAME.Approve"] }
+  ],
+  "role-collections": [
+    { "name": "ResilientSC Viewer", "description": "Read-only access", "role-template-references": ["$XSAPPNAME.Viewer"] },
+    { "name": "ResilientSC Operator", "description": "Run scenarios and respond to disruptions", "role-template-references": ["$XSAPPNAME.Operator"] },
+    { "name": "ResilientSC Approver", "description": "Approve or reject escalated plans", "role-template-references": ["$XSAPPNAME.Approver"] }
+  ],
+  "oauth2-configuration": {
+    "redirect-uris": ["https://*.hana.ondemand.com/**"]
+  }
+}

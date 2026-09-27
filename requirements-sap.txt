@@ -1,0 +1,7 @@
+# SAP BTP / SAP HANA Cloud (Phase 21). Everything here is optional at runtime: the default deployment (SQLite, no
+# authentication, no integration) imports none of it. requirements.txt includes this file so a Cloud Foundry
+# deployment, whose Python buildpack installs requirements.txt only, gets it.
+
+hdbcli>=2.20                 # SAP's HANA client driver (DB-API)
+sqlalchemy-hana>=4.0         # SQLAlchemy dialect `hana+hdbcli://` (renders the DDL in db/hana/schema.sql)
+PyJWT[crypto]>=2.8           # verifies XSUAA / IAS tokens when AUTH_MODE=jwt (backend/api/security.py)

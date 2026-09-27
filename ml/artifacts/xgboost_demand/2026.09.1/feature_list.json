@@ -1,0 +1,15 @@
+[
+  "lag_1",
+  "lag_2",
+  "lag_7",
+  "lag_14",
+  "lag_28",
+  "rolling_mean_7",
+  "rolling_mean_14",
+  "rolling_mean_28",
+  "day_of_week",
+  "month",
+  "disruption_active",
+  "product_id",
+  "location_id"
+]

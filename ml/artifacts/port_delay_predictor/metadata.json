@@ -1,0 +1,45 @@
+{
+  "model_name": "ResilientSC-PortDelay-XGBoost",
+  "version": "2026.09.2-realtime",
+  "trained_at_utc": "2026-09-27T05:53:55.901844+00:00",
+  "training_samples": 3600,
+  "source_dataset": "data/processed/ports_realtime.csv",
+  "features": [
+    "anchorage_vessels",
+    "yard_utilization_pct",
+    "berth_productivity",
+    "turnaround_time_hours",
+    "wind_speed_knots",
+    "wave_height_meters",
+    "is_chokepoint_corridor",
+    "congestion_index"
+  ],
+  "metrics": {
+    "regression_r2": 0.9982,
+    "regression_mae_hours": 2.93,
+    "regression_rmse_hours": 4.24,
+    "regression_mape_pct": 13.47,
+    "classification_accuracy": 0.9722,
+    "classification_f1": 0.9679
+  },
+  "feature_importance_regression": {
+    "anchorage_vessels": 0.4709,
+    "yard_utilization_pct": 0.024,
+    "berth_productivity": 0.0031,
+    "turnaround_time_hours": 0.1631,
+    "wind_speed_knots": 0.0017,
+    "wave_height_meters": 0.0015,
+    "is_chokepoint_corridor": 0.0135,
+    "congestion_index": 0.3222
+  },
+  "feature_importance_classification": {
+    "anchorage_vessels": 0.0127,
+    "yard_utilization_pct": 0.0305,
+    "berth_productivity": 0.0047,
+    "turnaround_time_hours": 0.0067,
+    "wind_speed_knots": 0.014,
+    "wave_height_meters": 0.0114,
+    "is_chokepoint_corridor": 0.0001,
+    "congestion_index": 0.9198
+  }
+}
