@@ -13,6 +13,7 @@ Nothing here touches SAP HANA. What is tested is everything that can be tested w
 """
 from __future__ import annotations
 
+import csv
 import hashlib
 import importlib.util
 import json
@@ -99,7 +100,7 @@ def _header(table) -> list[str]:
 @needs_data
 def test_the_checked_in_package_is_what_the_generator_writes():
     package = hana_core.build_package(DATA_DIR)
-    assert set(package) == {"01_create_tables.sql", "02_comments.sql", "HANA_PREFLIGHT_HACKFEST0119.sql", "03_validate.sql", "99_drop_tables.sql", "HANA_DATA_DICTIONARY.csv", "HANA_DATA_DICTIONARY.md", "HANA_LOAD_PLAN.md"}
+    assert set(package) == {"01_create_tables.sql", "02_create_tables.sql", "02_comments.sql", "HANA_PREFLIGHT_HACKFEST0119.sql", "03_validate.sql", "99_drop_tables.sql", "HANA_DATA_DICTIONARY.csv", "HANA_DATA_DICTIONARY.md", "HANA_LOAD_PLAN.md"}
     for name, text in package.items():
         assert (PACKAGE_DIR / name).read_text(encoding="utf-8") == text, f"{name} is stale: python -m backend.database.hana_core"
 
@@ -206,6 +207,65 @@ def test_the_preflight_verifies_the_types_the_requirements_pin():
 def test_the_preflight_instructions_exist_and_name_the_file_to_run():
     text = (PACKAGE_DIR / "HANA_PREFLIGHT_INSTRUCTIONS.md").read_text(encoding="utf-8")
     assert "HANA_PREFLIGHT_HACKFEST0119.sql" in text
+
+
+# --------------------------------------------------------------------------- 02_create_tables.sql: the 17 empty tables, paste-and-run
+def _parse_created_tables(sql: str) -> dict[str, dict]:
+    """Reads SQL TEXT, not the Python model: {table: {cols: [(name, type, nullable)], pk: [names], fks: {column: 'PARENT.COLUMN'}}}."""
+    code = re.sub(r"--[^\n]*", "", sql)
+    tables = {}
+    for statement in (s.strip() for s in code.split(";") if s.strip()):
+        table, body = re.match(r'CREATE COLUMN TABLE "\w+"\."(\w+)" \((.*)\)$', statement, re.S).groups()
+        cols, pk, fks = [], [], {}
+        for line in (ln.strip().rstrip(",") for ln in body.split("\n")):
+            if c := re.match(r'^"(\w+)" ([A-Z]+(?:\(\d+(?:,\d+)?\))?)( NOT NULL)?$', line):
+                cols.append((c.group(1), c.group(2), c.group(3) is None))
+            if p := re.search(r"PRIMARY KEY \(([^)]*)\)", line):
+                pk = re.findall(r'"(\w+)"', p.group(1))
+            if f := re.search(r'FOREIGN KEY \(([^)]*)\) REFERENCES "\w+"\."(\w+)" \(([^)]*)\)', line):
+                fks.update(zip(re.findall(r'"(\w+)"', f.group(1)), (f"{f.group(2)}.{c}" for c in re.findall(r'"(\w+)"', f.group(3)))))
+        tables[table] = {"cols": cols, "pk": pk, "fks": fks}
+    return tables
+
+
+def test_02_create_tables_is_exactly_17_create_statements_in_the_target_schema_and_nothing_else():
+    sql = hana_core.render_create_tables_sql()
+    code = re.sub(r"--[^\n]*", "", sql)
+    statements = [s.strip() for s in code.split(";") if s.strip()]
+    assert len(statements) == 17 == code.count("CREATE COLUMN TABLE")
+    assert all(s.startswith(f'CREATE COLUMN TABLE "{SCHEMA}"."') for s in statements)
+    assert [s.split('"')[3] for s in statements] == REQUESTED_ORDER  # the 17 names, exactly, in the load order
+    for word in ("INSERT", "DROP", "TRUNCATE", "DELETE", "ALTER", "UPDATE", "MERGE", "UPSERT", "GRANT", "COMMENT", "SET SCHEMA", "EXEC", "DO BEGIN", "REPLACE"):
+        assert not re.search(rf"\b{word}\b", code.upper()), word
+    for line in sql.splitlines():  # a client must not mistake a comment for a statement end or a string
+        if line.lstrip().startswith("--"):
+            assert ";" not in line and "'" not in line, line
+
+
+def test_02_create_tables_is_01_with_only_the_schema_written_out():
+    with_schema = load.split_statements(hana_core.render_create_tables_sql())
+    plain = load.split_statements(hana_core.render_create_sql())
+    assert len(with_schema) == len(plain) == 17
+    assert [s.replace(f'"{SCHEMA}".', "") for s in with_schema] == plain  # types, keys, foreign keys, CHECKs, quoting and order: identical
+    assert sum(s.count(f'REFERENCES "{SCHEMA}"."') for s in with_schema) == sum(s.count("REFERENCES") for s in with_schema) == 20
+
+
+@needs_data
+def test_02_create_tables_on_disk_matches_the_dictionary_and_the_cleaned_csv_headers():
+    """The FILE as it sits in db/hana/core, parsed as text, against the dictionary file and the cleaned CSVs: not against the model that wrote it."""
+    parsed = _parse_created_tables((PACKAGE_DIR / "02_create_tables.sql").read_text(encoding="utf-8"))
+    assert list(parsed) == REQUESTED_ORDER
+    dictionary = list(csv.DictReader((PACKAGE_DIR / "HANA_DATA_DICTIONARY.csv").open(encoding="utf-8", newline="")))
+    assert len(dictionary) == sum(len(t["cols"]) for t in parsed.values()) == 164
+    for row in dictionary:
+        t = parsed[row["TABLE"]]
+        col = next(c for c in t["cols"] if c[0] == row["COLUMN"])
+        assert col[1] == row["DATA TYPE"], row
+        assert (row["NULLABLE"] == "YES") == col[2], row
+        assert (row["PRIMARY KEY"] == "YES") == (row["COLUMN"] in t["pk"]), row
+        assert row["FOREIGN KEY"] == t["fks"].get(row["COLUMN"], ""), row
+    for table in TABLES:
+        assert [c[0] for c in parsed[table.name]["cols"]] == [h.upper() for h in _header(table)], table.name  # same columns, same order as the cleaned CSV
 
 
 # --------------------------------------------------------------------------- the loader's own logic

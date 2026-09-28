@@ -7,7 +7,8 @@ Nothing here connects to SAP HANA, deploys anything or modifies a cleaned file. 
 anything unless every cleaned value fits the column it is declared for (`hana_core_load.preflight`), and (2) compute the expected
 row counts and control totals the validation SQL compares against. The files it writes:
 
-    01_create_tables.sql         the 17 tables: types, primary keys, foreign keys, CHECKs
+    01_create_tables.sql         the 17 tables: types, primary keys, foreign keys, CHECKs (unqualified: they land in the current schema)
+    02_create_tables.sql         the same 17 CREATE statements with the target schema written out, and nothing else: paste-and-run
     02_comments.sql              COMMENT ON for every table and column (optional; the data dictionary inside HANA)
     HANA_PREFLIGHT_<SCHEMA>.sql  the first run for one schema: report, create the 17 tables only if no name is taken, verify (no DROP, no load)
     03_validate.sql              the validation scorecards, to run after loading
@@ -157,7 +158,25 @@ def render_drop_sql() -> str:
     )
 
 
-PREFLIGHT_SCHEMA = "HACKFEST0119"
+PREFLIGHT_SCHEMA = "HACKFEST0119"  # the confirmed target schema: the pre-flight and 02_create_tables.sql are written for it
+
+
+def render_create_tables_sql(schema: str = PREFLIGHT_SCHEMA) -> str:
+    """The 17 CREATE COLUMN TABLE statements and nothing else, every name qualified with `schema`, for pasting into a SQL console that
+    may not be in that schema. The same statements as 01_create_tables.sql (a test proves it) with the schema written out: no SET SCHEMA,
+    no guard block, no data. Comments avoid semicolons and apostrophes so no client can mistake them for a statement end or a string."""
+    body = "\n\n".join(create_table_sql(t, schema=schema) for t in TABLES)
+    return (
+        f"-- ResilientSC core data model for SAP HANA Cloud: the {len(TABLES)} EMPTY column tables of schema {schema}. Nothing else.\n"
+        f"-- {HEADER.replace(';', ',')}\n--\n"
+        "-- The same statements as 01_create_tables.sql, with the schema written out on every table and REFERENCES target so nothing depends on\n"
+        "-- SET SCHEMA. There is no INSERT, DROP, TRUNCATE, DELETE, ALTER or COMMENT in this file. HANA never replaces a table: if a name already\n"
+        "-- exists that CREATE fails and the existing table is left exactly as it is. NOT YET RUN ON A HANA TENANT.\n--\n"
+        "-- HOW: SQL console on the Hackfest-DB instance, preference On error = Stop, paste the whole file, Run All (F8).\n"
+        "-- Parents are created before children, so every foreign key finds its parent.\n"
+        "-- IF IT STOPS PART-WAY: do not run the whole file again. Run STEP 3 of HANA_PREFLIGHT_HACKFEST0119.sql to see which tables exist,\n"
+        "-- then select and run only the CREATE statements of the tables that are missing, in file order.\n\n" + body + "\n"
+    )
 
 
 def _literal_rows(aliases: tuple[str, ...], rows: list[tuple]) -> str:
@@ -519,7 +538,8 @@ def render_load_plan(facts: Facts) -> str:
 
 | File | What it does |
 |---|---|
-| `01_create_tables.sql` | creates the 17 tables with keys, foreign keys and CHECKs |
+| `01_create_tables.sql` | creates the 17 tables with keys, foreign keys and CHECKs, in the current schema (unqualified names) |
+| `02_create_tables.sql` | the same 17 statements with `{PREFLIGHT_SCHEMA}` written out on every name, and nothing else: no data, no `SET SCHEMA`, no guard |
 | `02_comments.sql` | optional: table and column comments |
 | `HANA_PREFLIGHT_{PREFLIGHT_SCHEMA}.sql` | **run first**: report, create the 17 tables only if none of the names is taken, verify; no DROP, no data (see `HANA_PREFLIGHT_INSTRUCTIONS.md`) |
 | `03_validate.sql` | validation scorecards, run after loading |
@@ -539,7 +559,7 @@ Parents before children. {total:,} rows in all.
 
 **Before anything connects (once).**
 
-1. The 17 tables exist in `{PREFLIGHT_SCHEMA}` and are empty: `HANA_PREFLIGHT_{PREFLIGHT_SCHEMA}.sql` ran and its STEP 3 was all `OK`. The loader creates nothing itself.
+1. The 17 tables exist in `{PREFLIGHT_SCHEMA}` and are empty: created by `02_create_tables.sql` (or STEP 2 of `HANA_PREFLIGHT_{PREFLIGHT_SCHEMA}.sql`, which makes the same tables, never both) and STEP 3 of the pre-flight was all `OK`. The loader creates nothing itself.
 2. The SAP drivers are installed in the Python that runs the loader: `py -3.12 -m pip install hdbcli sqlalchemy-hana` (both are listed in `requirements-sap.txt`). The loader says so if they are missing.
 3. The connection. `--execute` and `--check-target` read it from `DATABASE_URL` (or a bound HANA instance on BTP), so nothing goes on the command line. It needs four things from your HANA Cloud instance: **host** (`<instance-id>.hana.<region>.hanacloud.ondemand.com`), **port** (443), **database user** and **password**. TLS is mandatory (`encrypt=true`). In PowerShell, this prompts without echoing the password, encodes it (a raw `@ : / # %` would break the URL) and keeps it out of your command history and the process list:
 
@@ -606,6 +626,7 @@ def build_package(data_dir: Path = load.DEFAULT_DATA_DIR) -> dict[str, str]:
     facts = read_facts(data_dir)
     return {
         "01_create_tables.sql": render_create_sql(),
+        "02_create_tables.sql": render_create_tables_sql(),
         "02_comments.sql": render_comments_sql(),
         f"HANA_PREFLIGHT_{PREFLIGHT_SCHEMA}.sql": render_preflight_sql(),
         "03_validate.sql": render_validation_sql(facts),
